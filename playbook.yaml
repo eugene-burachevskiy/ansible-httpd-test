@@ -1,0 +1,63 @@
+---
+- hosts: all
+  become: yes
+  become_user: root
+  vars_files:
+    - default.yaml
+
+  tasks:
+    - name: Install Apache
+      apt: name=apache2 update_cache=yes state=latest
+
+    - name: Install UFW
+      apt: name=ufw update_cache=yes state=latest
+
+    - name: Create document root
+      file:
+        path: "/var/www/{{ APACHE_HOST }}"
+        state: directory
+        owner: root
+        mode: "0755"
+
+    - name: Setup index page
+      template:
+        src: "templates/index.html.j2"
+        dest: "/var/www/{{ APACHE_HOST }}/index.html"
+
+    - name: Setup Listen port
+      template:
+        src: "templates/ports.conf.j2"
+        dest: "/etc/apache2/ports.conf"
+
+    - name: Setup Virtualhost
+      template:
+        src: "templates/httpd.conf.j2"
+        dest: "/etc/apache2/sites-available/{{ APACHE_HOST }}.conf"
+
+    - name: Enable Virtualhost
+      shell: /usr/sbin/a2ensite {{ APACHE_HOST }}.conf
+      notify: Restart Apache
+
+    - name: "UFW - Allow SSH"
+      ufw:
+        rule: allow
+        port: "22" 
+        proto: tcp 
+
+    - name: "UFW - Deny All Incoming"
+      ufw:
+        state: enabled
+        direction: incoming
+        policy: deny
+
+    - name: "UFW - Allow HTTP on port {{ APACHE_PORT }}"
+      ufw:
+        rule: allow
+        port: "{{ APACHE_PORT }}"
+        proto: tcp
+
+  handlers:
+    - name: Restart Apache
+      service:
+        name: apache2
+        state: restarted
